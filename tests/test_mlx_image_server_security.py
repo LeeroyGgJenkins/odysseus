@@ -138,3 +138,23 @@ def test_pinned_hidream_model_is_still_served(server, tmp_path, monkeypatch):
     _client(server).post("/v1/images/generations", json={"model": "", "prompt": "x"})
 
     assert marker.exists(), "the model this server was launched with must still run"
+
+
+@pytest.mark.parametrize(
+    "model, expected_cli",
+    [
+        ("schnell", "mflux-generate"),
+        ("black-forest-labs/FLUX.1-dev", "mflux-generate"),
+        ("qwen-image", "mflux-generate-qwen"),
+        ("flux2-klein-4b", "mflux-generate-flux2"),
+        ("black-forest-labs/FLUX.2-klein-9B", "mflux-generate-flux2"),
+        ("z-image-turbo", "mflux-generate-z-image-turbo"),
+        ("Tongyi-MAI/Z-Image-Turbo", "mflux-generate-z-image-turbo"),
+        ("/Users/x/.cache/mflux/z-image-turbo-q8", "mflux-generate-z-image-turbo"),
+    ],
+)
+def test_cli_for_model_routes_each_mflux_family(server, model, expected_cli):
+    """mflux has one CLI per family; the generic one is FLUX.1-only and rejects
+    FLUX.2 Klein, so Klein and Z-Image names (built-in, repo id, or a local
+    mflux-save directory) must route to their own commands."""
+    assert server._cli_for_model(model) == expected_cli
