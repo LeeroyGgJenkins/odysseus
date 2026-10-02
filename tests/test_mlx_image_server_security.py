@@ -140,21 +140,55 @@ def test_pinned_hidream_model_is_still_served(server, tmp_path, monkeypatch):
     assert marker.exists(), "the model this server was launched with must still run"
 
 
+
 @pytest.mark.parametrize(
-    "model, expected_cli",
+    "registry_key, expected_cli",
     [
+        ("dev", "mflux-generate"),
         ("schnell", "mflux-generate"),
-        ("black-forest-labs/FLUX.1-dev", "mflux-generate"),
+        ("krea-dev", "mflux-generate"),
         ("qwen-image", "mflux-generate-qwen"),
+        ("qwen-image-edit", "mflux-generate-qwen"),
+        ("qwen-image-2.1", "mflux-generate-qwen-2.1"),
         ("flux2-klein-4b", "mflux-generate-flux2"),
-        ("black-forest-labs/FLUX.2-klein-9B", "mflux-generate-flux2"),
+        ("flux2-klein-base-9b", "mflux-generate-flux2"),
         ("z-image-turbo", "mflux-generate-z-image-turbo"),
-        ("Tongyi-MAI/Z-Image-Turbo", "mflux-generate-z-image-turbo"),
-        ("/Users/x/.cache/mflux/z-image-turbo-q8", "mflux-generate-z-image-turbo"),
+        ("z-image", "mflux-generate-z-image"),
     ],
 )
-def test_cli_for_model_routes_each_mflux_family(server, model, expected_cli):
-    """mflux has one CLI per family; the generic one is FLUX.1-only and rejects
-    FLUX.2 Klein, so Klein and Z-Image names (built-in, repo id, or a local
-    mflux-save directory) must route to their own commands."""
-    assert server._cli_for_model(model) == expected_cli
+def test_cli_for_model_maps_registry_key_to_family_cli(server, monkeypatch, registry_key, expected_cli):
+    """mflux has one generate CLI per family and the generic one is FLUX.1-only,
+    so each canonical registry key must land on its family's command."""
+    monkeypatch.setattr(server, "_mflux_registry_key", lambda model, base_model="": model)
+    assert server._cli_for_model(registry_key) == expected_cli
+
+
+def test_cli_for_model_keeps_old_behaviour_when_name_cannot_be_resolved(server, monkeypatch):
+    """Without mflux, or for a name mflux does not know, fall back to the
+    historical sniff so nothing that worked before changes."""
+    monkeypatch.setattr(server, "_mflux_registry_key", lambda model, base_model="": None)
+    assert server._cli_for_model("flux2-klein-4b") == "mflux-generate"
+    assert server._cli_for_model("mlx-community/Qwen-Image-8bit") == "mflux-generate-qwen"
+
+
+def test_mflux_registry_key_is_none_when_mflux_is_not_installed(server, monkeypatch):
+    # None in sys.modules makes the import raise ImportError. Hide the already
+    # imported submodules too, or the cached one would be handed back.
+    for name in list(sys.modules):
+        if name == "mflux" or name.startswith("mflux."):
+            monkeypatch.setitem(sys.modules, name, None)
+    monkeypatch.setitem(sys.modules, "mflux", None)
+    assert server._mflux_registry_key("flux2-klein-4b") is None
+
+
+def test_mflux_registry_key_resolves_names_repos_and_paths(server):
+    """Against the real mflux registry: built-in alias, Hugging Face repo id,
+    and a local mflux-save directory all resolve; --base-model disambiguates a
+    custom checkpoint; an unknown name is None rather than an exception."""
+    pytest.importorskip("mflux")
+    assert server._mflux_registry_key("klein-9b") == "flux2-klein-9b"
+    assert server._mflux_registry_key("mlx-community/flux2-klein-mlx") == "flux2-klein-4b"
+    assert server._mflux_registry_key("Tongyi-MAI/Z-Image-Turbo") == "z-image-turbo"
+    assert server._mflux_registry_key("/x/.cache/mflux/z-image-turbo-q8") == "z-image-turbo"
+    assert server._mflux_registry_key("/x/.cache/mflux/my-finetune", base_model="dev") == "dev"
+    assert server._mflux_registry_key("mlx-community/some-unknown-model") is None
