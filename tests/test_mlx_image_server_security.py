@@ -187,7 +187,7 @@ def test_mflux_registry_key_resolves_names_repos_and_paths(server):
     custom checkpoint; an unknown name is None rather than an exception."""
     pytest.importorskip("mflux")
     assert server._mflux_registry_key("klein-9b") == "flux2-klein-9b"
-    assert server._mflux_registry_key("mlx-community/flux2-klein-mlx") == "flux2-klein-4b"
+    assert server._mflux_registry_key("mlx-community/FLUX.2-klein-4B-bf16") == "flux2-klein-4b"  # what the Cookbook launches
     assert server._mflux_registry_key("Tongyi-MAI/Z-Image-Turbo") == "z-image-turbo"
     assert server._mflux_registry_key("/x/.cache/mflux/z-image-turbo-q8") == "z-image-turbo"
     assert server._mflux_registry_key("/x/.cache/mflux/my-finetune", base_model="dev") == "dev"
